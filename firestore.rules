@@ -1,0 +1,305 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Shared Security Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email_verified == true &&
+          request.auth.token.email == 'hoqueamarul848@gmail.com'
+        )
+      );
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+        'userId', 'displayName', 'email', 'role', 'plan',
+        'dailyRequestsUsed', 'dailyDateKey', 'totalRequests',
+        'voiceEnabled', 'speechRate', 'preferredLanguage',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'userId', 'displayName', 'email', 'photoUrl', 'role', 'plan',
+        'dailyRequestsUsed', 'dailyDateKey', 'totalRequests',
+        'voiceEnabled', 'speechRate', 'preferredLanguage',
+        'createdAt', 'updatedAt'
+      ]) &&
+      data.userId is string && data.userId == userId &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+      (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+      data.role in ['user', 'admin'] &&
+      data.plan in ['free', 'pro', 'premium'] &&
+      data.dailyRequestsUsed is int && data.dailyRequestsUsed >= 0 && data.dailyRequestsUsed <= 100000 &&
+      data.dailyDateKey is string && data.dailyDateKey.size() >= 8 && data.dailyDateKey.size() <= 20 &&
+      data.totalRequests is int && data.totalRequests >= 0 && data.totalRequests <= 10000000 &&
+      data.voiceEnabled is bool &&
+      data.speechRate is number && data.speechRate >= 0.5 && data.speechRate <= 2.5 &&
+      data.preferredLanguage is string && data.preferredLanguage.size() >= 2 && data.preferredLanguage.size() <= 40 &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidConversation(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'lastMessagePreview', 'messageCount', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'lastMessagePreview', 'messageCount', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+      data.lastMessagePreview is string && data.lastMessagePreview.size() <= 300 &&
+      data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 10000 &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidChatMessage(data, userId, conversationId) {
+      return data.keys().hasAll(['userId', 'conversationId', 'role', 'text', 'module', 'createdAt']) &&
+      data.keys().hasOnly(['userId', 'conversationId', 'role', 'text', 'module', 'createdAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.conversationId is string && data.conversationId == conversationId &&
+      data.role in ['user', 'model'] &&
+      data.text is string && data.text.size() >= 1 && data.text.size() <= 30000 &&
+      data.module is string && data.module.size() >= 1 && data.module.size() <= 40 &&
+      data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidTask(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'description', 'priority', 'completed', 'dueDateLabel', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'description', 'priority', 'completed', 'dueDateLabel', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.description is string && data.description.size() <= 1000 &&
+      data.priority in ['low', 'medium', 'high'] &&
+      data.completed is bool &&
+      data.dueDateLabel is string && data.dueDateLabel.size() <= 60 &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidNote(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'content', 'tag', 'pinned', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'content', 'tag', 'pinned', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.content is string && data.content.size() <= 15000 &&
+      data.tag is string && data.tag.size() <= 40 &&
+      data.pinned is bool &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidReminder(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'timeLabel', 'category', 'completed', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'timeLabel', 'category', 'completed', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.timeLabel is string && data.timeLabel.size() >= 1 && data.timeLabel.size() <= 60 &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+      data.completed is bool &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidPlannerEvent(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'timeSlot', 'durationMinutes', 'category', 'dateKey', 'completed', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'timeSlot', 'durationMinutes', 'category', 'dateKey', 'completed', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.timeSlot is string && data.timeSlot.size() >= 1 && data.timeSlot.size() <= 40 &&
+      data.durationMinutes is int && data.durationMinutes >= 5 && data.durationMinutes <= 1440 &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+      data.dateKey is string && data.dateKey.size() >= 8 && data.dateKey.size() <= 20 &&
+      data.completed is bool &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidKnowledgeEntry(data, userId) {
+      return data.keys().hasAll(['userId', 'title', 'summary', 'content', 'category', 'createdAt', 'updatedAt']) &&
+      data.keys().hasOnly(['userId', 'title', 'summary', 'content', 'category', 'createdAt', 'updatedAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+      data.summary is string && data.summary.size() <= 500 &&
+      data.content is string && data.content.size() >= 1 && data.content.size() <= 15000 &&
+      data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+      data.createdAt is timestamp && data.createdAt <= request.time &&
+      data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUsageRecord(data, userId) {
+      return data.keys().hasAll(['userId', 'module', 'promptChars', 'responseChars', 'createdAt']) &&
+      data.keys().hasOnly(['userId', 'module', 'promptChars', 'responseChars', 'createdAt']) &&
+      data.userId is string && data.userId == userId &&
+      data.module is string && data.module.size() >= 1 && data.module.size() <= 40 &&
+      data.promptChars is int && data.promptChars >= 0 && data.promptChars <= 500000 &&
+      data.responseChars is int && data.responseChars >= 0 && data.responseChars <= 500000 &&
+      data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- Collection Rules ---
+
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && request.auth.uid == adminUid;
+      allow list, write: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        (incoming().role == 'user' || isAdmin());
+
+      allow update: if isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'photoUrl', 'plan', 'dailyRequestsUsed',
+              'dailyDateKey', 'totalRequests', 'voiceEnabled',
+              'speechRate', 'preferredLanguage', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+
+      // Conversations
+      match /conversations/{conversationId} {
+        allow get: if isValidId(userId) && isValidId(conversationId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(conversationId) && isOwner(userId) &&
+          isValidConversation(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(conversationId) && isOwner(userId) &&
+          isValidConversation(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'lastMessagePreview', 'messageCount', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(conversationId) && isOwner(userId);
+
+        // Messages
+        match /messages/{messageId} {
+          allow get: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isOwner(userId);
+          allow list: if isValidId(userId) && isValidId(conversationId) && isOwner(userId);
+          allow create: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isOwner(userId) &&
+            isValidChatMessage(incoming(), userId, conversationId);
+          allow update: if false;
+          allow delete: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isOwner(userId);
+        }
+      }
+
+      // Tasks
+      match /tasks/{taskId} {
+        allow get: if isValidId(userId) && isValidId(taskId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(taskId) && isOwner(userId) &&
+          isValidTask(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(taskId) && isOwner(userId) &&
+          isValidTask(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'priority', 'completed', 'dueDateLabel', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(taskId) && isOwner(userId);
+      }
+
+      // Notes
+      match /notes/{noteId} {
+        allow get: if isValidId(userId) && isValidId(noteId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(noteId) && isOwner(userId) &&
+          isValidNote(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(noteId) && isOwner(userId) &&
+          isValidNote(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'tag', 'pinned', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(noteId) && isOwner(userId);
+      }
+
+      // Reminders
+      match /reminders/{reminderId} {
+        allow get: if isValidId(userId) && isValidId(reminderId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(reminderId) && isOwner(userId) &&
+          isValidReminder(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(reminderId) && isOwner(userId) &&
+          isValidReminder(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'timeLabel', 'category', 'completed', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(reminderId) && isOwner(userId);
+      }
+
+      // Daily Planner Events
+      match /planner/{eventId} {
+        allow get: if isValidId(userId) && isValidId(eventId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(eventId) && isOwner(userId) &&
+          isValidPlannerEvent(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(eventId) && isOwner(userId) &&
+          isValidPlannerEvent(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'timeSlot', 'durationMinutes', 'category', 'dateKey', 'completed', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(eventId) && isOwner(userId);
+      }
+
+      // Personal Knowledge Center
+      match /knowledge/{entryId} {
+        allow get: if isValidId(userId) && isValidId(entryId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(entryId) && isOwner(userId) &&
+          isValidKnowledgeEntry(incoming(), userId);
+        allow update: if isValidId(userId) && isValidId(entryId) && isOwner(userId) &&
+          isValidKnowledgeEntry(incoming(), userId) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'summary', 'content', 'category', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(entryId) && isOwner(userId);
+      }
+
+      // Usage Telemetry (Append-only)
+      match /usage/{usageId} {
+        allow get: if isValidId(userId) && isValidId(usageId) && (isOwner(userId) || isAdmin());
+        allow list: if isValidId(userId) && (isOwner(userId) || isAdmin());
+        allow create: if isValidId(userId) && isValidId(usageId) && isOwner(userId) &&
+          isValidUsageRecord(incoming(), userId);
+        allow update, delete: if false;
+      }
+    }
+  }
+}

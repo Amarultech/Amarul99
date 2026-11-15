@@ -1,0 +1,183 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated JARVIS AI user profile, subscription tier, usage counters, and voice/AI preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID of the user." },
+        "displayName": { "type": "string", "description": "Display name." },
+        "email": { "type": "string", "description": "Email address." },
+        "photoUrl": { "type": "string", "description": "Optional profile photo URL." },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "Authorization role." },
+        "plan": { "type": "string", "enum": ["free", "pro", "premium"], "description": "SaaS subscription tier." },
+        "dailyRequestsUsed": { "type": "integer", "description": "AI requests consumed on dailyDateKey." },
+        "dailyDateKey": { "type": "string", "description": "YYYY-MM-DD date string for daily quota reset." },
+        "totalRequests": { "type": "integer", "description": "Lifetime AI requests count." },
+        "voiceEnabled": { "type": "boolean", "description": "Auto-speak AI responses via TTS." },
+        "speechRate": { "type": "number", "description": "TTS speech rate multiplier." },
+        "preferredLanguage": { "type": "string", "description": "Default assistant language." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp." }
+      },
+      "required": ["userId", "displayName", "email", "role", "plan", "dailyRequestsUsed", "dailyDateKey", "totalRequests", "voiceEnabled", "speechRate", "preferredLanguage", "createdAt", "updatedAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "AI Chat conversation thread header.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "lastMessagePreview": { "type": "string" },
+        "messageCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "lastMessagePreview", "messageCount", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message inside a JARVIS AI conversation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string" },
+        "module": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "conversationId", "role", "text", "module", "createdAt"]
+    },
+    "JarvisTask": {
+      "title": "JarvisTask",
+      "description": "User task in the To-Do Manager.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "completed": { "type": "boolean" },
+        "dueDateLabel": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "description", "priority", "completed", "dueDateLabel", "createdAt", "updatedAt"]
+    },
+    "JarvisNote": {
+      "title": "JarvisNote",
+      "description": "User note in the Notes Manager.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "tag": { "type": "string" },
+        "pinned": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "content", "tag", "pinned", "createdAt", "updatedAt"]
+    },
+    "JarvisReminder": {
+      "title": "JarvisReminder",
+      "description": "User reminder entry in the Reminder Manager.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "timeLabel": { "type": "string" },
+        "category": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "timeLabel", "category", "completed", "createdAt", "updatedAt"]
+    },
+    "PlannerEvent": {
+      "title": "PlannerEvent",
+      "description": "Time-blocked event in the Daily Planner.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "timeSlot": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "category": { "type": "string" },
+        "dateKey": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "timeSlot", "durationMinutes", "category", "dateKey", "completed", "createdAt", "updatedAt"]
+    },
+    "KnowledgeEntry": {
+      "title": "KnowledgeEntry",
+      "description": "Personal Knowledge Center document.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "summary", "content", "category", "createdAt", "updatedAt"]
+    },
+    "UsageRecord": {
+      "title": "UsageRecord",
+      "description": "Append-only AI request telemetry record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "module": { "type": "string" },
+        "promptChars": { "type": "integer" },
+        "responseChars": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "module", "promptChars", "responseChars", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile, subscription plan, and usage counters."
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "Conversation threads owned by a user."
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages inside a user's conversation thread."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/JarvisTask" },
+      "description": "Tasks owned by a user."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/JarvisNote" },
+      "description": "Notes owned by a user."
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/JarvisReminder" },
+      "description": "Reminders owned by a user."
+    },
+    "/users/{userId}/planner/{eventId}": {
+      "schema": { "$ref": "#/entities/PlannerEvent" },
+      "description": "Daily planner blocks owned by a user."
+    },
+    "/users/{userId}/knowledge/{entryId}": {
+      "schema": { "$ref": "#/entities/KnowledgeEntry" },
+      "description": "Personal knowledge base entries owned by a user."
+    },
+    "/users/{userId}/usage/{usageId}": {
+      "schema": { "$ref": "#/entities/UsageRecord" },
+      "description": "Append-only usage telemetry records owned by a user."
+    }
+  }
+}
